@@ -2702,5 +2702,212 @@ window.PY_DATA = {"〇":"ling,yuan,xing","一":"yi","丁":"ding,zheng","丂":"ka
 })();
 
 </script>
+
+<script id="workspace-redesign-controller">
+(function(){
+"use strict";
+var LABELS={
+ prepare:["01 / PREPARE","数据准备","一次管理学生名单和家长联系方式，多个项目直接复用"],
+ work:["02 / REGISTER","快速登记工作台","输入姓名或拼音，确认学生后连续登记"],
+ export:["03 / EXPORT","结果导出","选择结果类型、班级范围和导出字段"]
+};
+function node(tag,cls,content){
+  var n=document.createElement(tag);
+  if(cls)n.className=cls;
+  if(content!==undefined)n.innerHTML=content;
+  return n;
+}
+function setup(){
+  var main=document.querySelector("main.layout");
+  var head=document.querySelector("header.topbar");
+  var project=head.querySelector(".project");
+  var roster=main.querySelector(".col-roster"),work=main.querySelector(".col-main"),right=main.querySelector(".col-right");
+  if(!main||!head||!project||!roster||!work||!right)return;
+  main.classList.add("ux-layout");
+  main.dataset.view="work";
+  head.classList.add("ux-topbar");
+  var brand=head.querySelector(".brand");
+  if(brand){
+    var desc=brand.querySelector(".brand-text p");
+    if(desc)desc.textContent="CLASSROOM WORKSPACE · 本地离线版";
+  }
+  var nav=node("nav","ux-nav",[
+    '<button type="button" data-nav="prepare"><span>01</span> 数据准备</button>',
+    '<button type="button" data-nav="work" class="active"><span>02</span> 登记工作台</button>',
+    '<button type="button" data-nav="export"><span>03</span> 结果导出</button>'
+  ].join(""));
+  nav.setAttribute("aria-label","工作区导航");
+  head.insertBefore(nav,project);
+  var ops=project.querySelector(".project-ops");
+  var more=node("details","ux-project-menu",'<summary aria-label="项目管理" title="项目管理">···</summary>');
+  more.appendChild(ops);
+  project.appendChild(more);
+  var settingButton=node("button","ux-settings-trigger",'<svg class="ico"><use href="#i-db"></use></svg>');
+  settingButton.type="button";
+  settingButton.title="数据管理与备份";
+  settingButton.setAttribute("aria-label","数据管理与备份");
+  head.appendChild(settingButton);
+  var heading=node("section","ux-head",'<div><span class="ux-overline" id="uxOverline">02 / REGISTER</span><h2 id="uxTitle">快速登记工作台</h2><p id="uxSubtitle">输入姓名或拼音，确认学生后连续登记</p></div><div class="ux-head-right"><i class="dot"></i>数据保存在本地<span class="res">桌面版 · 1920×1080</span></div>');
+  main.parentNode.insertBefore(heading,main);
+  roster.querySelector(".card-head h2").innerHTML='<svg class="ico"><use href="#i-users"></use></svg>学生与家长资料';
+  work.querySelector(".card-head h2").innerHTML='<svg class="ico"><use href="#i-check"></use></svg>快速搜索与登记';
+  var search=work.querySelector(".searchbar");
+  var grp=work.querySelector("#groupChips");
+  work.insertBefore(grp,search);
+  var lead=node("div","ux-search-lead",'<span class="serial">01</span><div><strong>查找学生</strong><p>每次登记成功后，自动返回搜索框</p></div><span class="hotkey"><kbd>/</kbd> 定位搜索</span>');
+  work.insertBefore(lead,grp);
+  var mark=work.querySelector("#quickMark");
+  var idle=node("section","ux-idle",'<span class="idle-icon"><svg class="ico xl"><use href="#i-search"></use></svg></span><h3>找到学生，立即开始登记</h3><p>支持姓名、全拼和拼音首字母，无需逐条翻阅名单</p><div class="steps"><span><b>1</b>搜索</span><i></i><span><b>2</b>确认学生</span><i></i><span><b>3</b>完成登记</span></div>');
+  idle.id="uxIdle";
+  work.insertBefore(idle,mark);
+  var noMatch=node("section","ux-no-match",'<svg class="ico xl"><use href="#i-search"></use></svg><h3>没有找到匹配学生</h3><p>尝试输入完整姓名，或检查当前选择的班级范围。</p>');
+  noMatch.id="uxNoMatch";
+  noMatch.hidden=true;
+  work.insertBefore(noMatch,mark);
+  var selection=node("section","ux-match",'<div class="eyebrow"><i></i><span id="uxMatchCaption">已找到学生</span></div><div class="match-main"><div><h3 id="uxMatchName">—</h3><p id="uxMatchGroup">—</p></div><div class="match-value"><small>当前登记</small><strong id="uxMatchStatus">—</strong></div></div><p class="match-tip" id="uxMatchTip">核对姓名和班级后开始登记</p>');
+  selection.id="uxSelected";
+  selection.hidden=true;
+  work.insertBefore(selection,mark);
+  var filters=work.querySelector("#filterChips");
+  var resultHeader=node("div","ux-results-title",'搜索结果 <small id="uxResultHint">搜索后显示匹配名单</small>');
+  work.insertBefore(resultHeader,filters);
+  var batchDone=work.querySelector("#btnBatchDone"),batchReset=work.querySelector("#btnBatchReset");
+  var bulk=node("details","ux-batch",'<summary>批量操作 ⌄</summary>');
+  var content=node("div","batch-actions");
+  content.appendChild(batchDone);
+  content.appendChild(batchReset);
+  bulk.appendChild(content);
+  filters.appendChild(bulk);
+  var tip=document.querySelector("#emptyTip p");
+  if(tip)tip.textContent="还没有学生名单，请先到「数据准备」导入";
+  var stats=right.querySelectorAll(":scope > section.card")[0];
+  var exporter=right.querySelectorAll(":scope > section.card")[1];
+  var backup=right.querySelectorAll(":scope > section.card")[2];
+  if(!stats||!exporter||!backup)return;
+  stats.classList.add("ux-stats-card");
+  exporter.classList.add("ux-export-card");
+  var shortcuts=node("div","ux-shortcuts",'<strong>键盘快捷操作</strong><div><kbd>↑</kbd><kbd>↓</kbd><span>选择候选学生</span></div><div><kbd>Enter</kbd><span>确认 / 登记</span></div><div><kbd>/</kbd><span>聚焦搜索框</span></div><div><kbd>Esc</kbd><span>清空输入</span></div>');
+  stats.appendChild(shortcuts);
+  var exporterHead=exporter.querySelector(".card-head");
+  var exportOpts=node("div","ux-export-options",'<p class="ux-export-intro">选择导出内容和人员范围，核对结果预览后生成 Excel 文件。默认不导出家长电话。</p><div class="ux-form-label">导出内容</div><div class="ux-export-choices"><label><input type="radio" name="uxExportKind" value="group" checked><span><strong>按登记状态分组</strong><small>不同状态生成单独工作表</small></span></label><label><input type="radio" name="uxExportKind" value="all"><span><strong>完整登记明细</strong><small>姓名、班级、状态或成绩及备注</small></span></label></div><div class="ux-form-label">人员范围</div><select class="ux-export-scope" id="uxExportScope"><option value="">全部班级</option></select><div class="ux-export-preview-title"><strong>结果预览</strong><small id="uxExportSummary">根据项目自动更新</small></div>');
+  exporterHead.after(exportOpts);
+  var oldBtns=[...exporter.querySelectorAll(".btn-row")];
+  var actions=node("div","ux-export-main-actions",'<button type="button" class="btn primary" id="uxRunExport"><svg class="ico"><use href="#i-export"></use></svg>导出 Excel</button><button type="button" class="btn soft" id="uxCopyText"><svg class="ico"><use href="#i-copy"></use></svg>复制文字</button>');
+  exporter.appendChild(actions);
+  var legacy=node("div","ux-export-legacy");
+  oldBtns.forEach(function(el){legacy.appendChild(el);});
+  exporter.appendChild(legacy);
+  var overlay=node("div","ux-overlay hidden",'<div class="ux-overlay-backdrop" id="uxBackdrop"></div><aside class="ux-settings" aria-label="数据管理"><div class="ux-settings-header"><div><small>DATA MANAGEMENT</small><h2>数据管理</h2></div><button id="uxCloseSettings" type="button" aria-label="关闭">×</button></div><p>在这里集中处理备份、恢复与本地 JSON 文件关联。家长联系方式不随 HTML 上传到公开仓库。</p></aside>');
+  overlay.setAttribute("role","dialog");
+  overlay.setAttribute("aria-modal","true");
+  overlay.querySelector(".ux-settings").appendChild(backup);
+  document.body.appendChild(overlay);
+  function hideSettings(){overlay.classList.add("hidden");if(main.dataset.view==="work")document.getElementById("q").focus();}
+  function openSettings(){overlay.classList.remove("hidden");overlay.querySelector("#uxCloseSettings").focus();}
+  settingButton.addEventListener("click",openSettings);
+  overlay.querySelector("#uxBackdrop").addEventListener("click",hideSettings);
+  overlay.querySelector("#uxCloseSettings").addEventListener("click",hideSettings);
+  function updateSummary(){
+    var kind=document.querySelector('input[name="uxExportKind"]:checked');
+    var scope=document.getElementById("uxExportScope");
+    var label=scope.selectedOptions[0]?.textContent||"全部班级";
+    var incl=document.getElementById("includeContactsInExport").checked?"包含家长信息":"不含家长信息";
+    document.getElementById("uxExportSummary").textContent=(kind&&kind.value==="all"?"完整明细":"状态分组")+" · "+label+" · "+incl;
+  }
+  function syncScope(){
+    var chips=[...document.querySelectorAll("#groupChips button[data-group]")];
+    var selected=chips.find(function(x){return x.classList.contains("active");});
+    var sel=document.getElementById("uxExportScope");
+    sel.replaceChildren();
+    if(!chips.length){sel.appendChild(new Option("全部班级",""));}
+    else chips.forEach(function(chip){sel.appendChild(new Option(chip.textContent.trim().replace(/\s+\d+$/,""),chip.dataset.group||""));});
+    sel.value=selected?selected.dataset.group||"":"";
+    updateSummary();
+  }
+  function showView(view,focus){
+    if(!["prepare","work","export"].includes(view))view="work";
+    main.dataset.view=view;
+    nav.querySelectorAll("button").forEach(function(b){
+      b.classList.toggle("active",b.dataset.nav===view);
+      if(b.dataset.nav===view)b.setAttribute("aria-current","page");else b.removeAttribute("aria-current");
+    });
+    document.getElementById("uxOverline").textContent=LABELS[view][0];
+    document.getElementById("uxTitle").textContent=LABELS[view][1];
+    document.getElementById("uxSubtitle").textContent=LABELS[view][2];
+    try{localStorage.setItem("zlsj-workspace-view",view);}catch(e){}
+    if(view==="export")syncScope();
+    if(view==="work"&&focus)setTimeout(function(){document.getElementById("q").focus();},30);
+    window.scrollTo(0,0);
+  }
+  nav.querySelectorAll("button").forEach(function(b){b.addEventListener("click",function(){showView(b.dataset.nav,true);});});
+  document.getElementById("uxExportScope").addEventListener("change",function(){
+    var wanted=this.value;
+    var target=[...document.querySelectorAll("#groupChips button[data-group]")].find(function(c){return (c.dataset.group||"")===wanted;});
+    if(target)target.click();
+    updateSummary();
+  });
+  document.querySelectorAll('input[name="uxExportKind"]').forEach(function(el){el.addEventListener("change",updateSummary);});
+  document.getElementById("includeContactsInExport").addEventListener("change",updateSummary);
+  document.getElementById("uxRunExport").addEventListener("click",function(){
+    var kind=document.querySelector('input[name="uxExportKind"]:checked').value;
+    document.getElementById(kind==="all"?"btnExportAllXlsx":"btnExportGroupXlsx").click();
+  });
+  document.getElementById("uxCopyText").addEventListener("click",function(){document.getElementById("btnCopyText").click();});
+  function refreshSearchDisplay(){
+    var text=document.getElementById("q").value.trim();
+    var list=document.getElementById("resultList");
+    var rows=[...list.querySelectorAll("li[data-id]")];
+    var has=text.length>0;
+    work.classList.toggle("ux-no-query",!has);
+    work.classList.toggle("ux-no-match-query",has&&!rows.length);
+    idle.hidden=has;
+    noMatch.hidden=!has||rows.length>0;
+    selection.hidden=!has||rows.length===0;
+    document.getElementById("uxResultHint").textContent=has?("匹配 "+rows.length+" 人 · ↑↓ 选择，回车登记"):"搜索后显示匹配名单";
+    if(!has||!rows.length)return;
+    var chosen=list.querySelector("li.sel[data-id]")||rows[0];
+    var nameEl=chosen.querySelector(".p-name");
+    var name=nameEl&&nameEl.firstChild?nameEl.firstChild.textContent.trim():"当前学生";
+    var tag=chosen.querySelector(".p-tag");
+    var score=chosen.querySelector('input[data-act="score"]');
+    var status=chosen.querySelector(".st-badge")||chosen.querySelector(".status-btn");
+    var statusValue=score?(score.value?score.value+" 分":"未登记"):(status?status.textContent.trim():"未登记");
+    document.getElementById("uxMatchName").textContent=name;
+    document.getElementById("uxMatchGroup").textContent=tag?tag.textContent.trim():"请核对班级与姓名";
+    document.getElementById("uxMatchStatus").textContent=statusValue;
+    document.getElementById("uxMatchCaption").textContent=rows.length===1?"已找到学生":("匹配 "+rows.length+" 名学生 · 当前选中");
+    document.getElementById("uxMatchTip").textContent=rows.length===1?"请核对姓名后在下方完成登记":"使用 ↑↓ 切换，确认目标学生后再登记";
+  }
+  var q=document.getElementById("q");
+  q.addEventListener("input",function(){setTimeout(refreshSearchDisplay,0);});
+  document.getElementById("btnClearQ").addEventListener("click",function(){setTimeout(refreshSearchDisplay,0);});
+  var observer=new MutationObserver(function(){refreshSearchDisplay();});
+  observer.observe(document.getElementById("resultList"),{childList:true,subtree:true,attributes:true,attributeFilter:["class"]});
+  document.addEventListener("keydown",function(e){
+    if(e.key==="Escape"&&!overlay.classList.contains("hidden")){hideSettings();return;}
+    if((e.ctrlKey||e.metaKey)&&["1","2","3"].includes(e.key)){
+      e.preventDefault();showView({1:"prepare",2:"work",3:"export"}[e.key],true);return;
+    }
+    if(e.key==="/"&&!e.ctrlKey&&!e.metaKey&&!e.altKey){
+      if(["INPUT","TEXTAREA","SELECT"].includes(document.activeElement.tagName))return;
+      if(main.dataset.view!=="work")return;
+      e.preventDefault();q.focus();
+    }
+    if(e.key==="Escape"&&main.dataset.view==="work"&&q.value&&overlay.classList.contains("hidden")){
+      q.value="";q.dispatchEvent(new Event("input",{bubbles:true}));q.focus();
+    }
+  });
+  setTimeout(function(){
+    var count=parseInt(document.getElementById("rosterCount").textContent,10)||0;
+    var preferred="work";
+    try{preferred=localStorage.getItem("zlsj-workspace-view")||"work";}catch(e){}
+    showView(count===0?"prepare":preferred,false);
+    if(count>0&&preferred==="work")q.focus();
+    refreshSearchDisplay();
+  },130);
+}
+document.addEventListener("DOMContentLoaded",setup);
+})();
+</script>
 </body>
 </html>
