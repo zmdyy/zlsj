@@ -693,6 +693,11 @@ kbd {
   .chips .spacer { display: none; }
 }
 
+.contact-section .btn.wide{width:100%;justify-content:center}
+.contact-summary{margin-top:9px;padding:9px 10px;border-radius:8px;background:#eaf6f3;color:#0c6759;font-size:12px;white-space:pre-wrap;line-height:1.65}
+.contact-summary.warn{background:#fff0e6;color:#924717}
+.r-contact{font-size:11px;color:#0f766e;max-width:128px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.contact-line{display:block;font-size:12px;color:#0f766e;font-weight:600;margin-top:3px}
 </style>
 </head>
 <body>
@@ -778,6 +783,15 @@ kbd {
           <span class="file-name" id="excelName">尚未选择文件</span>
         </div>
       </div>
+    </div>
+
+    <div class="sec contact-section">
+      <div class="sec-title">家长联系方式</div>
+      <p class="hint">上传通讯录，按「学生姓名＋班级」匹配，不影响原有登记。</p>
+      <button id="btnImportContacts" type="button" class="btn soft wide">导入家长通讯录（Excel / CSV）</button>
+      <input id="contactFile" type="file" accept=".xlsx,.xls,.csv" hidden>
+      <div class="contact-summary" id="contactSummary">尚未导入家长通讯录</div>
+      <p class="hint">表头建议：学生姓名、班级、家长姓名、联系电话、第二联系人、第二电话；也支持父亲电话、母亲电话。</p>
     </div>
 
     <div class="sec">
@@ -1369,6 +1383,7 @@ window.PY_DATA = {"〇":"ling,yuan,xing","一":"yi","丁":"ding,zheng","丂":"ka
         '<span class="r-name">' + esc(p.name) + '</span>' +
         tag +
         '<span class="r-py">' + esc(ix.mainFull) + '</span>' +
+        (contactLabel(p) ? '<span class="r-contact" title="' + esc(contactLabel(p)) + '">☎ ' + esc(contactLabel(p)) + '</span>' : '') +
         '<button class="icon-btn" data-act="editpy" data-id="' + p.id + '" title="修改拼音"><svg class="ico"><use href="#i-spell"></use></svg></button>' +
         '<button class="icon-btn danger" data-act="delperson" data-id="' + p.id + '" title="删除成员"><svg class="ico"><use href="#i-trash"></use></svg></button>' +
         '</li>';
@@ -1448,6 +1463,7 @@ window.PY_DATA = {"〇":"ling,yuan,xing","一":"yi","丁":"ding,zheng","丂":"ka
         (p.note && p.note !== p.group ? ' <span class="p-tag">' + esc(p.note) + '</span>' : '') +
         (three && st ? ' <span class="st-badge ' + st + '">' + STATUS_LABEL[st] + '</span>' : '') + '</div>' +
         '<div class="p-meta">' + esc(ix.mainFull) + ' · ' + esc(ix.mainInit) + (note ? ' · 备注：' + esc(note) : '') + '</div>' +
+        (contactLabel(p) ? '<span class="contact-line">☎ ' + esc(contactLabel(p)) + '</span>' : '') +
         '</div>' +
         ops +
         '<button class="icon-btn" data-act="note" data-id="' + p.id + '" title="添加备注"><svg class="ico"><use href="#i-pen"></use></svg></button>' +
@@ -1740,6 +1756,7 @@ window.PY_DATA = {"〇":"ling,yuan,xing","一":"yi","丁":"ding,zheng","丂":"ka
     // items: [{name, note}]
     var added = 0, updated = 0, skipped = 0;
     if (mode === 'replace') {
+      if(state.people.length&&!confirm('覆盖会清空所有项目的登记状态、备注和分数，请先备份。确认覆盖吗？'))return;
       state.people = [];
       state.tasks.forEach(function (t) { t.status = {}; t.notes = {}; t.scores = {}; });
     }
@@ -1752,7 +1769,10 @@ window.PY_DATA = {"〇":"ling,yuan,xing","一":"yi","丁":"ding,zheng","丂":"ka
       var note = String(it.note || '').trim();
       if (note && note === group) note = '';
       if (group) groupSeen[group] = 1;
-      var exist = state.people.filter(function (p) { return p.name === name; })[0];
+      var same=state.people.filter(function(p){return p.name===name;});
+      var exist=group?same.filter(function(p){return normalizeGroup(p.group)===normalizeGroup(group);})[0]
+        :(same.length===1?same[0]:null);
+      if(!group&&same.length>1){skipped++;return;}
       if (exist) {
         var changed = false;
         if (group && exist.group !== group) { exist.group = group; changed = true; }
@@ -1824,6 +1844,101 @@ window.PY_DATA = {"〇":"ling,yuan,xing","一":"yi","丁":"ding,zheng","丂":"ka
     return items;
   }
 
+
+  /* 仅为现有学生关联家长通讯录，匹配使用姓名+班级 */
+  function normalizeGroup(g){
+    var s=String(g==null?'':g).trim().replace(/[\s（）()]/g,'');
+    var m=s.match(/(\d+)班$/);
+    if(m)return String(Number(m[1]));
+    return /^\d+$/.test(s)?String(Number(s)):s;
+  }
+  function contactCols(p){
+    var c=p.contacts||{};
+    return [c.name||'',c.relation||'',c.phone||'',c.name2||'',c.relation2||'',c.phone2||''];
+  }
+  function contactLabel(p){
+    var c=p.contacts||{},parts=[];
+    if(c.phone)parts.push((c.name||c.relation||'家长')+'：'+c.phone);
+    if(c.phone2)parts.push((c.name2||c.relation2||'第二联系人')+'：'+c.phone2);
+    return parts.join('；');
+  }
+  function parseContactRows(rows){
+    if(!rows.length)throw new Error('表格没有数据');
+    var head=(rows[0]||[]).map(function(v){return String(v==null?'':v).replace(/\s+/g,'');});
+    function pick(patterns){
+      for(var k=0;k<patterns.length;k++){
+        var i=head.findIndex(function(h){return patterns[k].test(h);});
+        if(i>=0)return i;
+      }
+      return -1;
+    }
+    var colName=pick([/^(学生姓名|姓名|学生|名字|学生名字|成员姓名)$/]);
+    if(colName<0)throw new Error('第一行需要「学生姓名」或「姓名」表头');
+    var colGroup=pick([/^(班级|所在班级|行政班|班|组别)$/]);
+    var c={
+      name:pick([/^家长姓名$/, /^监护人姓名$/, /^联系人1?姓名$/, /^父亲姓名$/, /^爸爸姓名$/]),
+      relation:pick([/^(关系|与学生关系|家长关系|联系人1关系)$/]),
+      phone:pick([/^家长(手机|手机号|电话|联系电话|联系方式)$/, /^监护人(手机|电话|联系方式)$/, /^联系人1?(手机|电话|联系方式)$/, /^(联系电话|手机|手机号|手机号码|联系方式|电话)$/, /^父亲(手机|手机号|电话)$/, /^爸爸(手机|电话)$/]),
+      name2:pick([/^(第二联系人|第二家长|家长2姓名|联系人2姓名|母亲姓名|妈妈姓名)$/]),
+      relation2:pick([/^(第二关系|第二联系人关系|家长2关系|联系人2关系)$/]),
+      phone2:pick([/^(第二联系电话|第二电话|备用电话|备用联系电话|家长2电话|联系人2电话|联系人2手机号)$/, /^母亲(手机|手机号|电话)$/, /^妈妈(手机|电话)$/])
+    };
+    if(c.phone<0&&c.phone2<0)throw new Error('未找到家长电话列，请使用联系电话、家长电话、父亲电话或母亲电话');
+    function get(row,col){return col<0?'':String(row[col]==null?'':row[col]).trim();}
+    var result=[];
+    for(var r=1;r<rows.length;r++){
+      var row=rows[r]||[],name=get(row,colName).replace(/\s+/g,'');
+      if(!name)continue;
+      var item={
+        name:get(row,c.name),relation:get(row,c.relation),phone:get(row,c.phone).replace(/\.0$/,''),
+        name2:get(row,c.name2),relation2:get(row,c.relation2),phone2:get(row,c.phone2).replace(/\.0$/,'')
+      };
+      if(!item.relation&&c.phone>=0&&/父亲|爸爸/.test(head[c.phone]))item.relation='父亲';
+      if(!item.relation&&c.phone>=0&&/母亲|妈妈/.test(head[c.phone]))item.relation='母亲';
+      if(!item.relation2&&c.phone2>=0&&/母亲|妈妈/.test(head[c.phone2]))item.relation2='母亲';
+      if(!item.relation2&&c.phone2>=0&&/父亲|爸爸/.test(head[c.phone2]))item.relation2='父亲';
+      result.push({name:name,group:get(row,colGroup),contacts:item});
+    }
+    return result;
+  }
+  function importContacts(file){
+    if(!file)return;
+    if(typeof XLSX==='undefined'){toast('Excel组件未加载');return;}
+    var reader=new FileReader();
+    reader.onload=function(evt){
+      try{
+        var wb=XLSX.read(new Uint8Array(evt.target.result),{type:'array'});
+        var rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,blankrows:false,defval:''});
+        var entries=parseContactRows(rows),ok=0,missing=0,ambiguous=0,empty=0,unmatched=[];
+        entries.forEach(function(e){
+          if(!e.contacts.phone&&!e.contacts.phone2){empty++;return;}
+          var matches=state.people.filter(function(p){
+            return p.name.replace(/\s+/g,'')===e.name &&
+              (!e.group||normalizeGroup(p.group)===normalizeGroup(e.group));
+          });
+          if(matches.length===1){
+            var person=matches[0],current=person.contacts||{};
+            Object.keys(e.contacts).forEach(function(k){if(e.contacts[k])current[k]=e.contacts[k];});
+            person.contacts=current;ok++;
+          }else{
+            if(matches.length)ambiguous++;else missing++;
+            if(unmatched.length<8)unmatched.push(e.name+(e.group?'（'+e.group+'）':''));
+          }
+        });
+        if(ok){save();renderAll();}
+        var msg='匹配 '+ok+' 人；未找到 '+missing+' 人；同名待核对 '+ambiguous+' 人；缺少电话 '+empty+' 行。';
+        if(unmatched.length)msg+='\n未匹配示例：'+unmatched.join('、');
+        var box=document.getElementById('contactSummary');
+        box.textContent=msg;box.classList.toggle('warn',!!(missing||ambiguous));
+        toast('已关联 '+ok+' 人的联系方式');
+      }catch(err){
+        var box=document.getElementById('contactSummary');
+        box.textContent='导入失败：'+err.message;box.classList.add('warn');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
   /* ---------------- 导出 ---------------- */
   function download(filename, blob) {
     var url = URL.createObjectURL(blob);
@@ -1854,35 +1969,48 @@ window.PY_DATA = {"〇":"ling,yuan,xing","一":"yi","丁":"ding,zheng","丂":"ka
     toast('已导出未交名单 Excel');
   }
 
-  // 按分组导出 Excel：每组一个工作表
-  function exportGroupXlsx() {
-    if (!checkXlsx()) return;
-    var task = currentTask();
-    if (!task) return;
-    var groups = groupsOf(task);
-    var wb = XLSX.utils.book_new();
-    var used = {};
-    groups.forEach(function (g) {
-      var aoa = [['序号', '姓名', '状态', '班级/组别', '备注']];
-      var scoreMode = taskMode(task) === 'score';
-      aoa[0] = scoreMode ? ['序号', '姓名', '分数', '班级/组别', '备注'] : ['序号', '姓名', '状态', '班级/组别', '备注'];
-      g.list.forEach(function (p, i) {
-        var cell = scoreMode
-          ? (g.key === 'none' ? '' : formatScore(scoreOf(task, p.id)))
-          : (g.key === 'none' ? (taskMode(task) === 'three' ? '未回应' : '未交') : g.title);
-        aoa.push([i + 1, p.name, cell, p.group || p.note || '', task.notes[p.id] || '']);
+
+  // Excel：分数以数值储存，手机以字符串储存
+  function exportGroupXlsx(){
+    if(!checkXlsx())return;
+    var task=currentTask();if(!task)return;
+    var isScore=taskMode(task)==='score',groups=groupsOf(task),wb=XLSX.utils.book_new(),used={};
+    groups.forEach(function(group){
+      var columns=['序号','姓名',isScore?'分数':'状态','班级/组别','备注','家长姓名','关系','家长电话','第二联系人','第二关系','第二电话'];
+      var matrix=[columns];
+      group.list.forEach(function(p,i){
+        var sc=scoreOf(task,p.id);
+        var val=isScore?(sc==null?null:sc):(group.key==='none'?(taskMode(task)==='three'?'未回应':'未交'):group.title);
+        matrix.push([i+1,p.name,val,p.group||p.note||'',task.notes[p.id]||''].concat(contactCols(p)));
       });
-      if (!g.list.length) aoa.push(['', '（无）', '', '', '']);
-      var ws = XLSX.utils.aoa_to_sheet(aoa);
-      ws['!cols'] = [{ wch: 6 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 22 }];
-      var sname = g.title.replace(/[\\/?*\[\]:]/g, '-').replace(/[（）]/g, '').slice(0, 28).trim() || '分组';
-      var base = sname, n = 2;
-      while (used[sname]) { sname = base + n; n++; }
-      used[sname] = 1;
-      XLSX.utils.book_append_sheet(wb, ws, sname);
+      if(!group.list.length)matrix.push(['','（无）',null,'','']);
+      var last=matrix.length,sumRow=null,avgRow=null;
+      if(isScore){
+        matrix.push([]);
+        sumRow=matrix.length+1;matrix.push(['','总分',null,'已登记人数']);
+        avgRow=matrix.length+1;matrix.push(['','平均分',null,'未登记人数']);
+      }
+      var ws=XLSX.utils.aoa_to_sheet(matrix);
+      ws['!cols']=[{wch:7},{wch:16},{wch:12},{wch:14},{wch:20},{wch:14},{wch:10},{wch:19},{wch:14},{wch:10},{wch:19}];
+      for(var row=2;row<=last;row++){
+        if(isScore&&ws['C'+row]&&typeof ws['C'+row].v==='number')ws['C'+row].z='0.0';
+        ['H','K'].forEach(function(col){if(ws[col+row]){ws[col+row].t='s';ws[col+row].z='@';}});
+      }
+      if(isScore){
+        var r='C2:C'+last;
+        ws['C'+sumRow]={t:'n',f:'SUM('+r+')',z:'0.0'};
+        ws['C'+avgRow]={t:'n',f:'IF(COUNT('+r+')=0,"",AVERAGE('+r+'))',z:'0.0'};
+        ws['E'+sumRow]={t:'n',f:'COUNT('+r+')'};
+        ws['E'+avgRow]={t:'n',f:'COUNTBLANK('+r+')'};
+      }
+      var base=group.title.replace(/[\\/?*\[\]:]/g,'-').replace(/[（）]/g,'').slice(0,27).trim()||'分组';
+      var name=base,i=2;
+      while(used[name]){name=base.slice(0,27)+i;i++;}
+      used[name]=true;
+      XLSX.utils.book_append_sheet(wb,ws,name);
     });
-    XLSX.writeFile(wb, safeName('分组名单_' + task.title + '_' + todayStr()) + '.xlsx');
-    toast('已导出分组 Excel（' + groups.length + ' 个分组）');
+    XLSX.writeFile(wb,safeName('分组名单_'+task.title+'_'+todayStr())+'.xlsx');
+    toast('已导出分组 Excel：包含家长联系方式和数值成绩');
   }
 
   function copyText(text, okMsg) {
@@ -1908,27 +2036,37 @@ window.PY_DATA = {"〇":"ling,yuan,xing","一":"yi","丁":"ding,zheng","丂":"ka
     toast(ok ? (okMsg || '已复制到剪贴板') : '复制失败，请手动选中复制');
   }
 
-  function exportAllXlsx() {
-    if (!checkXlsx()) return;
-    var task = currentTask();
-    if (!task) return;
-    var scoreMode = taskMode(task) === 'score';
-    var aoa = [scoreMode
-      ? ['序号', '姓名', '班级', '拼音', '首字母', '分数', '备注']
-      : ['序号', '姓名', '班级', '拼音', '首字母', '状态', '备注']];
-    scopedPeople().forEach(function (p, i) {
-      var ix = idxOf(p);
-      var cell = scoreMode
-        ? (scoreOf(task, p.id) == null ? '' : Number(formatScore(scoreOf(task, p.id))))
-        : (statusOf(task, p.id) ? STATUS_LABEL[statusOf(task, p.id)] : '未交');
-      aoa.push([i + 1, p.name, p.group || '', ix.mainFull, ix.mainInit, cell, task.notes[p.id] || p.note || '']);
+
+  function exportAllXlsx(){
+    if(!checkXlsx())return;
+    var task=currentTask(),isScore=taskMode(task)==='score';
+    var matrix=[['序号','姓名','班级','拼音','首字母',isScore?'分数':'状态','备注',
+      '家长姓名','关系','家长电话','第二联系人','第二关系','第二电话']];
+    scopedPeople().forEach(function(p,i){
+      var ix=idxOf(p),sc=scoreOf(task,p.id);
+      var val=isScore?(sc==null?null:sc):(statusOf(task,p.id)?STATUS_LABEL[statusOf(task,p.id)]:'未交');
+      matrix.push([i+1,p.name,p.group||'',ix.mainFull,ix.mainInit,val,task.notes[p.id]||p.note||''].concat(contactCols(p)));
     });
-    var ws = XLSX.utils.aoa_to_sheet(aoa);
-    ws['!cols'] = [{ wch: 6 }, { wch: 14 }, { wch: 10 }, { wch: 16 }, { wch: 10 }, { wch: 8 }, { wch: 22 }];
-    var wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, '收集明细');
-    XLSX.writeFile(wb, safeName('收集明细_' + task.title + '_' + todayStr()) + '.xlsx');
-    toast('已导出全量明细 Excel');
+    var last=matrix.length,sumRow=null,avgRow=null;
+    if(isScore){
+      matrix.push([]);sumRow=matrix.length+1;matrix.push(['','','','','总分']);
+      avgRow=matrix.length+1;matrix.push(['','','','','平均分']);
+    }
+    var ws=XLSX.utils.aoa_to_sheet(matrix);
+    ws['!cols']=[{wch:7},{wch:16},{wch:12},{wch:18},{wch:10},{wch:12},{wch:20},{wch:14},{wch:10},{wch:19},{wch:14},{wch:10},{wch:19}];
+    for(var row=2;row<=last;row++){
+      if(isScore&&ws['F'+row]&&typeof ws['F'+row].v==='number')ws['F'+row].z='0.0';
+      ['J','M'].forEach(function(col){if(ws[col+row]){ws[col+row].t='s';ws[col+row].z='@';}});
+    }
+    if(isScore){
+      var r='F2:F'+last;
+      ws['F'+sumRow]={t:'n',f:'SUM('+r+')',z:'0.0'};
+      ws['F'+avgRow]={t:'n',f:'IF(COUNT('+r+')=0,"",AVERAGE('+r+'))',z:'0.0'};
+    }
+    var wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,'收集明细');
+    XLSX.writeFile(wb,safeName('收集明细_'+task.title+'_'+todayStr())+'.xlsx');
+    toast('已导出完整明细：含联系方式及数值分数');
   }
 
   /* ---------------- 事件绑定 ---------------- */
@@ -2318,6 +2456,10 @@ window.PY_DATA = {"〇":"ling,yuan,xing","一":"yi","丁":"ding,zheng","丂":"ka
 
     // 备份与恢复
     on(document.getElementById('btnSaveFile'), 'click', saveManual);
+    on(document.getElementById('btnImportContacts'), 'click', function(){document.getElementById('contactFile').click();});
+    on(document.getElementById('contactFile'), 'change', function(){
+      var file=this.files&&this.files[0];if(file)importContacts(file);this.value='';
+    });
     on(document.getElementById('btnLinkFile'), 'click', linkDataFile);
     on(document.getElementById('btnBackup'), 'click', function () {
       var blob = new Blob([JSON.stringify(state, function (k, v) { return k === '_idx' ? undefined : v; }, 2)], { type: 'application/json' });
