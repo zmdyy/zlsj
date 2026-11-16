@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0f766e">
+<meta name="description" content="名单导入、首字母速查、已交未交登记与一键导出">
+<title>资料收集登记助手</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<svg class="svg-sprite" aria-hidden="true">
+  <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 3a4 4 0 1 1 0 8 4 4 0 0 1 0-8Zm13 18v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 3v18h18M8 17V9m5 8V5m5 12v-6"/></symbol>
+  <symbol id="i-export" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></symbol>
+  <symbol id="i-clipboard" viewBox="0 0 24 24"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1Z"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><path d="M9 9h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V11a2 2 0 0 1 2-2Zm-4 4H3V3h10v2"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></symbol>
+  <symbol id="i-db" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/></symbol>
+  <symbol id="i-pen" viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2m-9 0 1 14h6l1-14"/></symbol>
+  <symbol id="i-spell" viewBox="0 0 24 24"><path d="M3 17c2.5 0 2.5-3 5-3s2.5 3 5 3 2.5-3 5-3M4 7h3l4 9 4-9h3"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></symbol>
+</svg>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="logo"><svg class="ico lg"><use href="#i-check"></use></svg></span>
+    <div class="brand-text">
+      <h1>资料收集登记助手</h1>
+      <p>导入名单 · 拼音速查 · 现场登记 · 分组导出</p>
+    </div>
+  </div>
+
+  <div class="project">
+    <span class="project-label">当前项目</span>
+    <select id="taskSelect" title="切换收集项目"></select>
+    <div class="project-ops">
+      <button id="btnNewTask" class="btn primary">新建</button>
+      <button id="btnRenameTask" class="btn">重命名</button>
+      <button id="btnDelTask" class="btn ghost-danger">删除</button>
+    </div>
+  </div>
+</header>
+
+<main class="layout">
+
+  <!-- 左：名单 -->
+  <section class="card col-roster">
+    <div class="card-head">
+      <h2><svg class="ico"><use href="#i-users"></use></svg>名单管理</h2>
+      <span class="badge" id="rosterCount">0 人</span>
+    </div>
+
+    <div class="sec">
+      <div class="sec-title">导入方式</div>
+      <div class="seg-row">
+        <div class="seg">
+          <button class="seg-btn active" data-import-mode="append">追加</button>
+          <button class="seg-btn" data-import-mode="replace">覆盖</button>
+        </div>
+        <span class="hint">追加＝去重补人　覆盖＝清空重建</span>
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="tabs">
+        <button class="tab active" data-tab="paste"><svg class="ico"><use href="#i-clipboard"></use></svg>粘贴文本</button>
+        <button class="tab" data-tab="excel"><svg class="ico"><use href="#i-upload"></use></svg>Excel / CSV</button>
+      </div>
+
+      <div class="pane" id="panePaste">
+        <textarea id="pasteBox" rows="6" placeholder="每行一个姓名，换行 / 逗号 / 制表符都可以&#10;第二列可作为班级、组别等备注&#10;例如：&#10;林传宇	八年级3班&#10;陈思远,八年级3班"></textarea>
+        <div class="pane-foot">
+          <button id="btnLoadDemo" class="btn soft">载入示例</button>
+          <button id="btnPasteAdd" class="btn primary">添加名单</button>
+        </div>
+      </div>
+
+      <div class="pane hidden" id="paneExcel">
+        <div class="drop" id="dropZone">
+          <svg class="ico xl"><use href="#i-upload"></use></svg>
+          <p class="drop-t">点击选择，或把文件拖到这里</p>
+          <p class="drop-s">支持 .xlsx / .xls / .csv，自动识别姓名，并按班级分成小组</p>
+        </div>
+        <input type="file" id="excelFile" accept=".xlsx,.xls,.csv" hidden>
+        <div class="pane-foot">
+          <span class="file-name" id="excelName">尚未选择文件</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-title">名单列表</div>
+      <div class="field">
+        <svg class="ico field-ico"><use href="#i-search"></use></svg>
+        <input type="text" id="rosterSearch" class="input has-ico" placeholder="查找成员（支持拼音首字母）">
+      </div>
+      <ul id="rosterList" class="roster-list"></ul>
+    </div>
+  </section>
+
+  <!-- 中：登记 -->
+  <section class="card col-main">
+    <div class="card-head">
+      <h2><svg class="ico"><use href="#i-check"></use></svg>登记与查询</h2>
+      <span class="badge" id="resultCount">0 条</span>
+    </div>
+
+    <div class="searchbar" role="search">
+      <svg class="ico field-ico" aria-hidden="true"><use href="#i-search"></use></svg>
+      <input type="text" id="q" class="input big has-ico" placeholder="输入姓名 / 首字母 / 全拼，如 lcy" autocomplete="off" aria-label="搜索姓名">
+      <button id="btnClearQ" class="clear-x" type="button" title="清空" aria-label="清空搜索">×</button>
+    </div>
+
+    <div class="quick-mark" id="quickMark">
+      <button id="btnMarkFirst" class="mark-btn" disabled><svg class="ico"><use href="#i-check"></use></svg><span id="markLabel">标记已交</span></button>
+      <p class="hint" id="markHint">多个结果时按 <kbd>↑</kbd><kbd>↓</kbd> 选择，按 <kbd>回车</kbd> 或 <kbd>空格</kbd> 登记（三态项目会弹出状态窗），随后自动清空继续查下一个</p>
+    </div>
+    <div class="quick-score hidden" id="quickScore">
+      <input type="text" id="scoreInput" class="score-input" inputmode="decimal" placeholder="分数" autocomplete="off" aria-label="考试分数">
+      <button id="btnSaveScore" class="mark-btn" type="button">记下分数</button>
+      <p class="hint">先搜索姓名，按 <kbd>回车</kbd> 输入分数，再按 <kbd>回车</kbd> 保存并查下一个。分数只存在当前项目里。</p>
+    </div>
+
+    <div class="group-chips hidden" id="groupChips"></div>
+
+    <div class="chips" id="filterChips">
+      <button class="chip active" data-filter="all">全部</button>
+      <button class="chip" data-filter="todo" id="chipTodo">未交</button>
+      <button class="chip" data-filter="done" id="chipDone">已交</button>
+      <span class="spacer"></span>
+      <button id="btnBatchDone" class="btn tiny">结果全部已交</button>
+      <button id="btnBatchReset" class="btn tiny soft">重置未交</button>
+    </div>
+
+    <ul id="resultList" class="result-list"></ul>
+    <div id="emptyTip" class="empty">
+      <svg class="ico xl"><use href="#i-users"></use></svg>
+      <p>还没有名单，请先在左侧导入或粘贴姓名</p>
+    </div>
+  </section>
+
+  <!-- 右：统计／导出／备份 -->
+  <div class="col-right">
+
+    <section class="card">
+      <div class="card-head">
+        <h2><svg class="ico"><use href="#i-chart"></use></svg>统计</h2>
+        <span class="badge" id="taskDate"></span>
+      </div>
+      <div class="stats">
+        <div class="stat"><span class="num" id="statTotal">0</span><span class="lbl">总人数</span></div>
+        <div class="stat ok"><span class="num" id="statDone">0</span><span class="lbl" id="lblDone">已交</span></div>
+        <div class="stat no"><span class="num" id="statTodo">0</span><span class="lbl" id="lblTodo">未交</span></div>
+      </div>
+      <div class="mini-stats hidden" id="miniStats">
+        <span class="ms done"><i></i>已交 <b id="msDone">0</b></span>
+        <span class="ms agree"><i></i>同意 <b id="msAgree">0</b></span>
+        <span class="ms disagree"><i></i>不同意 <b id="msDisagree">0</b></span>
+      </div>
+      <div class="progress"><div class="progress-bar" id="progressBar"></div></div>
+      <p class="rate" id="rateText">完成率 0%</p>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h2><svg class="ico"><use href="#i-export"></use></svg>导出</h2>
+        <span class="badge" id="exportCount">未交 0 人</span>
+      </div>
+
+      <div class="sec-title">分组名单 · 文字格式</div>
+      <div class="radio-row">
+        <input type="radio" name="sep" id="sepNl" value="nl" checked><label for="sepNl">换行</label>
+        <input type="radio" name="sep" id="sepComma" value="comma"><label for="sepComma">逗号</label>
+        <input type="radio" name="sep" id="sepSheet" value="sheet"><label for="sepSheet">带序号</label>
+      </div>
+
+      <div id="groupList" class="group-list"></div>
+
+      <textarea id="exportText" class="mono" rows="6" readonly hidden placeholder="这里显示分组名单"></textarea>
+      <div class="btn-row">
+        <button id="btnCopyText" class="btn primary"><svg class="ico"><use href="#i-copy"></use></svg>复制全部分组</button>
+        <button id="btnExportGroupXlsx" class="btn">导出分组 Excel</button>
+      </div>
+      <div class="btn-row">
+        <button id="btnExportAllXlsx" class="btn soft wide">导出全量明细（姓名+状态+备注）</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h2><svg class="ico"><use href="#i-shield"></use></svg>数据备份</h2>
+      </div>
+      <div class="btn-row">
+        <button id="btnSaveFile" class="btn primary" type="button">保存</button>
+        <button id="btnBackup" class="btn soft"><svg class="ico"><use href="#i-db"></use></svg>备份数据</button>
+        <button id="btnRestore" class="btn soft">恢复备份</button>
+      </div>
+      <input type="file" id="backupFile" accept=".json" hidden>
+      <p class="hint" id="storeStatus">正在连接本地保存…</p>
+    </section>
+
+  </div>
+</main>
+
+<div id="toast" class="toast"></div>
+
+<!-- 新建项目 -->
+<div class="mask hidden" id="maskNew">
+  <div class="modal">
+    <h3>新建收集项目</h3>
+    <div class="form-row">
+      <label class="form-lbl" for="newTaskTitle">项目名称</label>
+      <input type="text" id="newTaskTitle" class="input" placeholder="如：八年级3班-体检表" autocomplete="off">
+    </div>
+    <label class="check">
+      <input type="checkbox" id="newTaskMode">
+      <span>启用「同意 / 不同意」状态<em>勾选后：状态为 已交 / 同意 / 不同意 三种；适合回执、授权书这类需要区分意愿的场景</em></span>
+    </label>
+    <label class="check">
+      <input type="checkbox" id="newTaskScore">
+      <span>登记考试分数<em>仍使用现在的名单。分数记在这个项目上，不会改动已有的已交 / 未交记录。</em></span>
+    </label>
+    <div class="modal-foot">
+      <button id="btnNewCancel" class="btn soft">取消</button>
+      <button id="btnNewOk" class="btn primary">创建项目</button>
+    </div>
+  </div>
+</div>
+
+<!-- 状态选择（用于同意/不同意模式） -->
+<div class="mask hidden" id="maskPick">
+  <div class="modal narrow">
+    <h3>登记状态：<span id="pickName"></span></h3>
+    <div class="pick-row">
+      <button class="pick-opt" data-val="done">已交</button>
+      <button class="pick-opt sel" data-val="agree">同意</button>
+      <button class="pick-opt" data-val="disagree">不同意</button>
+    </div>
+    <p class="hint">← → 切换，<kbd>回车</kbd> 确认，<kbd>Esc</kbd> 取消</p>
+    <div class="modal-foot">
+      <button id="btnPickUndo" class="btn soft">撤销为未交</button>
+      <button id="btnPickOk" class="btn primary">确认</button>
+    </div>
+  </div>
+</div>
+
+<script src="vendor/xlsx.full.min.js"></script>
+<script src="vendor/pinyin-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
